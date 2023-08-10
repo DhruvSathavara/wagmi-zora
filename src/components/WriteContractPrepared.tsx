@@ -1,52 +1,93 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { BaseError } from 'viem'
+import { BaseError, Address } from "viem";
 import {
   useContractWrite,
   usePrepareContractWrite,
   useWaitForTransaction,
-} from 'wagmi'
+  useChainId,
+  useAccount,
+} from "wagmi";
 
-import { wagmiContractConfig } from './contracts'
-import { useDebounce } from '../hooks/useDebounce'
-import { stringify } from '../utils/stringify'
+import { stringify } from "../utils/stringify";
+import { zoraNftCreatorV1Config } from "@zoralabs/nft-drop-contracts"; 
 
 export function WriteContractPrepared() {
-  const [tokenId, setTokenId] = useState('')
-  const debouncedTokenId = useDebounce(tokenId)
+  const chainId = useChainId() as keyof typeof zoraNftCreatorV1Config.address;
 
-  const { config } = usePrepareContractWrite({
-    ...wagmiContractConfig,
-    functionName: 'mint',
-    enabled: Boolean(debouncedTokenId),
-    args: [BigInt(debouncedTokenId)],
-  })
-  const { write, data, error, isLoading, isError } = useContractWrite(config)
+  const { address } = useAccount();
+
+  // hardcoded erc721 creation params.
+  const contractName = "proly My new contract";
+  const symbol = "PRL";
+  const editionSize = 50n;
+  const royaltyBps = 0;
+  const fundsRecipient = address!;
+  const defaultAdmin = address!;
+  const description = "my awesome token";
+  const animationUri = "0x0";
+  const imageUri = "https://bafkreihv5ax2toa6u474m2f2giyex4kfzm3qu5oojglsclqrakj6ubnory.ipfs.nftstorage.link/";
+  // max value for maxSalePurchasePerAddress, results in no mint limit
+  const maxSalePurchasePerAddress = 4294967295;
+  const createReferral = address!;
+
+  // prepare the transaction
+  const {
+    config,
+    error: prepareError,
+    isError: isPrepareError,
+  } = usePrepareContractWrite({
+    abi: zoraNftCreatorV1Config.abi,
+    address: zoraNftCreatorV1Config.address[chainId] as Address,
+    functionName: "createEditionWithReferral",
+    args: [
+      contractName,
+      symbol,
+      editionSize,
+      royaltyBps,
+      fundsRecipient,
+      defaultAdmin,
+      {
+        maxSalePurchasePerAddress,
+        presaleEnd: 0n,
+        presaleStart: 0n,
+        presaleMerkleRoot:
+          "0x0000000000000000000000000000000000000000000000000000000000000000",
+        // max value for end date, results in no end date for mint
+        publicSaleEnd: 18446744073709551615n,
+        publicSalePrice: 0n,
+        publicSaleStart: 0n,
+      },
+      description,
+      animationUri,
+      imageUri,
+      createReferral,
+    ],
+  });
+
+  const { write, data, error, isLoading, isError } = useContractWrite(config);
+console.log('--data',config);
+  
   const {
     data: receipt,
     isLoading: isPending,
     isSuccess,
-  } = useWaitForTransaction({ hash: data?.hash })
+  } = useWaitForTransaction({ hash: data?.hash });
 
   return (
     <>
-      <h3>Mint a wagmi</h3>
+      <h3>Create an Zora ERC721 Edition</h3>
       <form
         onSubmit={(e) => {
-          e.preventDefault()
-          write?.()
+          e.preventDefault();
+          write?.();
         }}
       >
-        <input
-          placeholder="token id"
-          onChange={(e) => setTokenId(e.target.value)}
-        />
         <button disabled={!write} type="submit">
-          Mint
+          Create
         </button>
       </form>
-
+      {isPrepareError && <div>{prepareError?.message}</div>}
       {isLoading && <div>Check wallet...</div>}
       {isPending && <div>Transaction pending...</div>}
       {isSuccess && (
@@ -59,5 +100,5 @@ export function WriteContractPrepared() {
       )}
       {isError && <div>{(error as BaseError)?.shortMessage}</div>}
     </>
-  )
+  );
 }
